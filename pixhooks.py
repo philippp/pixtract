@@ -1,7 +1,9 @@
+import Image
 import json
 import time
 import secrets
-import pixsize
+
+GALLERY_SIZE_LIMIT = 20
 
 def process_update_email(subject, parts):
     '''
@@ -27,7 +29,7 @@ def update_gallery(new_files):
     else:
         gallery = []
     gallery = new_files + gallery
-    gallery_str = json.dumps(gallery)
+    gallery_str = json.dumps(gallery[:GALLERY_SIZE_LIMIT])
     f = open(secrets.static_dir+'/gallery.json','w')
     f.write(gallery_str)
     f.close()
@@ -45,17 +47,64 @@ def store_images_metadata(images, subject):
     filenames = []
 
     for idx, image in enumerate(images):
+        extension = image[1].split("/")[1].replace('"','')
         filename = "%s_%s.%s" % (
             int(time.time()*10000000),
             idx,
-            image[1].split("/")[1])
+            extension)
         filepath = secrets.static_dir+"/"+filename
         fh = open(filepath, "wb")
         fh.write(image[0])
         fh.close()
-        sizes = pixsize.size_image(filepath)
+        sizes = rotate_and_scale_image(filepath)
         filedict = {'story':subject,
                     'orig':filename}
         filedict.update(sizes)
         filenames.append(filedict)
     return filenames
+
+
+size_small = 200, 200
+size_big = 1024, 1024
+
+def rotate_and_scale_image(src_path):
+    im = Image.open(src_path)
+    exif_data = im._getexif()
+    
+    # We rotate regarding to the EXIF orientation information
+    if exif_data:
+        orientation = exif_data.get(274)
+        if orientation == 1:
+            mirror = im.copy()
+        elif orientation == 2:
+            mirror = im.transpose(Image.FLIP_LEFT_RIGHT)
+        elif orientation == 3:
+            mirror = im.transpose(Image.ROTATE_180)
+        elif orientation == 4:
+            mirror = im.transpose(Image.FLIP_TOP_BOTTOM)
+        elif orientation == 5:
+            mirror = im.transpose(Image.FLIP_TOP_BOTTOM).transpose(Image.ROTATE_270)
+        elif orientation == 6:
+            mirror = im.transpose(Image.ROTATE_270)
+        elif orientation == 7:
+            mirror = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_270)
+        elif orientation == 8:
+            mirror = im.transpose(Image.ROTATE_90)
+        else:
+            mirror = im.copy()
+    else:
+        # No EXIF information, the user has to do it
+        mirror = im.copy()
+
+    namer = lambda sep: ".".join(src_path.split(".")[:1])+sep+"."+src_path.split(".")[-1]
+    bigname = namer("_big")
+    mirror.thumbnail(size_big, Image.ANTIALIAS)
+    mirror.save(bigname, "JPEG", quality=85)
+    bigname = bigname.split("/")[-1]
+    smallname = namer("_small")
+    mirror.thumbnail(size_small, Image.ANTIALIAS)
+    mirror.save(smallname, "JPEG", quality=85)
+    smallname = smallname.split("/")[-1]
+
+    return {'small':smallname,
+            'big':bigname}

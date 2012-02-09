@@ -1,0 +1,10 @@
+Pixtract - email photos to your site!
+
+The premise of Pixtract is simple: email photos (and other media) to an IMAP account,
+then have your server periodically check the inbox for new messages and download
+attachments if the message contains a secret passphrase (to avoid CRAX0R attacks).
+
+A server-side .json file is updated with the paths to your recent uploads, and
+can be queried via client-side javascript to show off your lovely media.
+
+Requirements: ImageMagick + Python bindings for resizing + an IMAP account.
