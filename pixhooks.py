@@ -2,6 +2,8 @@ import Image
 import json
 import time
 import secrets
+import pdb
+import twitter
 
 GALLERY_SIZE_LIMIT = 20
 
@@ -14,11 +16,22 @@ def process_update_email(subject, parts):
     '''
     images = []
     new_files = []
+    do_tweet = False
+    description = ""
     for part, part_type in parts:
+        if 'text/' in part_type:
+            for line in part:
+                if '#tw' in line:
+                    do_tweet = True
+                    line.replace('#tw','')
+                if line.replace(' ',''):
+                    description += line.strip()+"\n"
         if 'image/' in part_type:
             images.append((image_from_mime_part(part), part_type))
-            new_files += store_images_metadata(images,subject)
+            new_files += store_images_metadata(images, description, subject)
     update_gallery(new_files)
+    if do_tweet:
+        tweet_about(new_files)
 
 def update_gallery(new_files):
     f = open(secrets.static_dir+'/gallery.json','r')
@@ -34,6 +47,14 @@ def update_gallery(new_files):
     f.write(gallery_str)
     f.close()
 
+def tweet_about(new_files):
+    api = twitter.Api(**secrets.twitter)
+    if new_files:
+        first_file = new_files[0]
+        first_url = secrets.picture_path + first_file['big'].split('/')[-1]
+        update = first_file['story'] + " " + first_url
+        api.PostUpdate(update)
+
 def image_from_mime_part(part):
     base64buffer = ''
     for line in part:
@@ -43,11 +64,11 @@ def image_from_mime_part(part):
             base64buffer += line
     return base64buffer.decode('base64')
     
-def store_images_metadata(images, subject):
+def store_images_metadata(images, description, subject):
     filenames = []
 
     for idx, image in enumerate(images):
-        extension = image[1].split("/")[1].replace('"','')
+        extension = image[1].split("/")[1].split(" ")[0].split('"')[0]
         filename = "%s_%s.%s" % (
             int(time.time()*10000000),
             idx,
@@ -58,6 +79,7 @@ def store_images_metadata(images, subject):
         fh.close()
         sizes = rotate_and_scale_image(filepath)
         filedict = {'story':subject,
+                    'description':description,
                     'orig':filename}
         filedict.update(sizes)
         filenames.append(filedict)

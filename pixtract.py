@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import imaplib
+import email
 import secrets
 import pixhooks
 import pdb
@@ -15,17 +16,23 @@ def fetch_update_emails(host, address, password):
         subject, parts = fetch_subject_mime_parts(session, mid)
         images = []
         part_types = []
+        filtered_parts = []
         for part in parts:
             part_type = ''
+            filtered_part = []
             for line in part:
                 if "Content-Type" in line:
                     part_type = line.split(":")[1].strip().replace(";","")
+                    continue
 
                 if secrets.passphrase.lower() in line.lower():
                     has_passphrase = True
+                    line = line.lower().replace(secrets.passphrase.lower(),'')
+                filtered_part.append(line)
+            filtered_parts.append(filtered_part)
             part_types.append(part_type)
         if has_passphrase:
-            pixhooks.process_update_email(subject, zip(parts, part_types))
+            pixhooks.process_update_email(subject, zip(filtered_parts, part_types))
             session.store(mid, '+FLAGS', r'(\Deleted)')
         else:
             session.store(mid, '-FLAGS', r'(\Seen)')
@@ -52,6 +59,7 @@ def fetch_subject_mime_parts(session, mid):
     subj_resp = session.fetch(mid, '(RFC822.SIZE BODY[HEADER.FIELDS (SUBJECT)])')
     s_parts = subj_resp[1][0][1].split(":")
     subject = ":".join(s_parts[1:]).strip()
+    subject = unicode(email.Header.make_header(email.Header.decode_header(subject)))
     resp = session.fetch(mid, '(UID BODY[TEXT])')
     resplines = resp[1][0][1].split('\r\n')
     parts = []
